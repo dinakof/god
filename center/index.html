@@ -191,6 +191,7 @@ label.f{display:flex;flex-direction:column;gap:4px;font-size:.86rem;color:var(--
     <nav id="nav" aria-label="מסכים">
       <button data-v="home" aria-current="true">סקירה</button>
       <button data-v="projects">פרויקטים</button>
+      <button data-v="day">סיכום יומי</button>
       <button data-v="tasks">משימות</button>
       <button data-v="calendar">יומן</button>
       <button data-v="regs">הרשמות</button>
@@ -230,7 +231,7 @@ const OUTCAT=['פרסום ממומן','קמפיינר ושיווק','צוות ו
 const LKINDS=[{k:'doc',n:'מסמך'},{k:'folder',n:'תיקייה'},{k:'link',n:'קישור'}];
 const DAYS=['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
 const MONTHS=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
-const COLS=['projects','tasks','regs','links','journal','money'];
+const COLS=['projects','tasks','regs','links','journal','money','daylog'];
 
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
@@ -250,7 +251,7 @@ const ls={get(k,d){try{const v=localStorage.getItem('ashia-c-'+k);return v==null
 
 /* ---------- state + storage ---------- */
 const S=Object.fromEntries(COLS.map(c=>[c,{}]));
-const UI={view:ls.get('view','home'),dom:'all',owner:ls.get('owner','all'),proj:'all',tstat:'open',month:null,sel:today(),open:null,rstat:'all',rprog:'all',showDone:false,fmonth:today().slice(0,7),mtype:'all'};
+const UI={day:today(),view:ls.get('view','home'),dom:'all',owner:ls.get('owner','all'),proj:'all',tstat:'open',month:null,sel:today(),open:null,rstat:'all',rprog:'all',showDone:false,fmonth:today().slice(0,7),mtype:'all'};
 let db=null, mode='local', loaded=false;
 const LKEY='ashia-center-v1';
 function saveLocal(){try{localStorage.setItem(LKEY,JSON.stringify(S))}catch(e){}}
@@ -382,11 +383,102 @@ function vHome(){
     <section class="card"><h2>ציוני דרך קרובים</h2>${taskList(ms,'אין ציוני דרך פתוחים.')}</section>
     </div>
   </div>
+  ${dayCard()}
   <div class="two">
     <section class="card"><div class="row between"><h2>יומן התקדמות</h2><button class="btn sm" data-act="new-j">+ תיעוד</button></div>${journalList(jr)}</section>
     <section class="card"><div class="row between"><h2>הרשמות לפי שלב</h2><button class="btn sm ghost" data-act="go" data-v="regs">להרשמות</button></div>${funnelHTML(false)}</section>
   </div>
   ${mode==='local'?`<p class="note">הנתונים נשמרים בדפדפן הזה בלבד, כי השמירה המשותפת לא זמינה כרגע.</p>`:''}`;
+}
+
+/* daily summary */
+const doneOn=d=>list('tasks').filter(t=>t.done&&t.doneAt&&ds(new Date(t.doneAt))===d);
+const dayEntries=d=>list('daylog').filter(e=>e.date===d);
+function dayItems(d){
+  const own=x=>UI.owner==='all'||x===UI.owner;
+  const a=dayEntries(d).filter(e=>own(e.who)).map(e=>({k:'e',ts:e.createdAt||0,e}));
+  const b=doneOn(d).filter(t=>own(t.owner)).map(t=>({k:'t',ts:t.doneAt,t}));
+  return [...a,...b].sort((x,y)=>x.ts-y.ts);
+}
+function dayItemRow(it){
+  if(it.k==='t'){const t=it.t,dm=DM[t.domain]||DM.admin;return `<li class="task done" style="--c:${dm.c}"><span style="color:var(--ok);font-weight:700">✓</span><div><div class="ttl" style="text-decoration:none;color:inherit">${esc(t.title)}</div><div class="meta"><span class="tag">משימה שסומנה</span>${t.owner?`<span class="tag own">${esc(t.owner)}</span>`:''}${dtag(t.domain)}${t.project?`<span>${esc(pname(t.project))}</span>`:''}</div></div><span></span></li>`}
+  const e=it.e,dm=DM[e.domain]||DM.admin;
+  return `<li class="task" style="--c:${dm.c}"><span style="color:var(--accent);font-weight:700">●</span><div><div class="ttl">${esc(e.text)}</div><div class="meta">${e.who?`<span class="tag own">${esc(e.who)}</span>`:''}${e.domain?dtag(e.domain):''}${e.project?`<span>${esc(pname(e.project))}</span>`:''}${e.minutes?`<span class="num">${e.minutes} דק׳</span>`:''}</div></div>
+    <div class="acts"><button class="icon" data-act="edit-day" data-id="${e.id}" aria-label="עריכה">✎</button></div></li>`;
+}
+function quickDayForm(d,idp){
+  return `<form class="qd" data-date="${d}" style="display:flex;flex-direction:column;gap:8px">
+    <label class="f" for="${idp}-text">מה עשית<textarea id="${idp}-text" name="text" required style="min-height:60px" placeholder="למשל: שיחה עם קמפיינר על תקציב דצמבר, ניסחתי פוסט לבלוג"></textarea></label>
+    <div class="row"><select class="sel" name="who" id="${idp}-who" aria-label="מי">${OWNERS.map(o=>`<option ${o===(UI.owner!=='all'?UI.owner:'דינה')?'selected':''}>${o}</option>`).join('')}</select>
+      <select class="sel" name="project" id="${idp}-proj" aria-label="פרויקט">${projOpts('')}</select>
+      <select class="sel" name="domain" id="${idp}-dom" aria-label="תחום"><option value="">תחום</option>${DOMAINS.map(x=>`<option value="${x.k}">${x.n}</option>`).join('')}</select>
+      <button class="btn sm" type="submit">הוספה לסיכום</button></div></form>`;
+}
+function dayCard(){
+  const d=today(), items=dayItems(d).filter(i=>!(i.k==='e'&&i.e.isNote));
+  return `<section class="card"><div class="row between"><h2>היום נעשה${UI.owner!=='all'?' · '+UI.owner:''}</h2><button class="btn sm ghost" data-act="go" data-v="day">לסיכום היומי</button></div>
+    ${items.length?`<ul class="tasks">${items.slice(-6).map(dayItemRow).join('')}</ul>${items.length>6?`<p class="note">ועוד ${items.length-6} בסיכום היומי</p>`:''}`:'<p class="note">עוד לא נרשם כלום היום. כל מה שעשית נכנס כאן, גם אם לא הייתה עליו משימה.</p>'}
+    ${quickDayForm(d,'qh')}</section>`;
+}
+function vDay(){
+  const d=UI.day, items=dayItems(d), dt=parse(d);
+  const note=list('daylog').find(e=>e.id==='note-'+d);
+  const entries=items.filter(i=>i.k==='e'&&!i.e.isNote);
+  const week=[...Array(7)].map((_,i)=>addDays(d,i-6));
+  return `<div class="row between"><h2>סיכום יומי</h2>${voiceBtn().replace('data-act="voice"','data-act="voice-day"').replaceAll('משימה בקול','סיכום בקול')}</div>
+  ${ownerChips()}
+  <div class="row"><button class="icon" data-act="day" data-n="-1" aria-label="יום קודם">→</button><h3 style="min-width:150px;text-align:center">${fmtDate(d)} ${MONTHS[dt.getMonth()]}</h3><button class="icon" data-act="day" data-n="1" aria-label="יום הבא">←</button><button class="btn sm ghost" data-act="day" data-n="0">היום</button>
+    <span class="note num">${entries.length} רישומים · ${items.filter(i=>i.k==='t').length} משימות שסומנו</span></div>
+  <div class="two">
+    <section class="card"><h2>מה נעשה</h2>
+      ${items.filter(i=>!(i.k==='e'&&i.e.isNote)).length?`<ul class="tasks">${items.filter(i=>!(i.k==='e'&&i.e.isNote)).map(dayItemRow).join('')}</ul>`:'<div class="empty">עוד אין רישומים ליום הזה.</div>'}
+      ${quickDayForm(d,'qd')}
+    </section>
+    <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+    <section class="card"><h2>הערות ליום</h2>
+      <label class="f" for="day-note">תובנות, החלטות, מה להמשיך מחר<textarea id="day-note" data-act="daynote" data-date="${d}" style="min-height:120px">${esc(note?.text||'')}</textarea></label>
+      <p class="note">נשמר אוטומטית כשיוצאים מהתיבה.</p></section>
+    <section class="card"><h2>השבוע</h2>
+      ${week.map(w=>{const n=dayItems(w).filter(i=>!(i.k==='e'&&i.e.isNote)).length;return `<button class="row between pcard" style="border:0;background:${w===d?'var(--accent-soft)':'transparent'};padding:6px 8px;border-radius:8px;text-align:start" data-act="day-go" data-d="${w}"><span>${fmtDate(w)}</span><span class="num muted">${n?n+' פריטים':'—'}</span></button>`}).join('')}
+    </section></div>
+  </div>
+  ${dayChart(d)}`;
+}
+function weekOf(d){const x=parse(d);return addDays(d,-x.getDay())}
+function dayChart(d){
+  const w0=weekOf(d), weeks=[...Array(8)].map((_,i)=>addDays(w0,(i-7)*7));
+  const data=weeks.map(w=>{let m=0,t=0,min=0;for(let i=0;i<7;i++){const it=dayItems(addDays(w,i)).filter(x=>!(x.k==='e'&&x.e.isNote));it.forEach(x=>{if(x.k==='e'){m++;min+=Number(x.e.minutes)||0}else t++})}return {w,m,t,min}});
+  const max=Math.max(1,...data.map(x=>x.m+x.t));
+  const tot=data.reduce((a,x)=>a+x.m+x.t,0), last=data[7].m+data[7].t, prev=data[6].m+data[6].t;
+  const from=addDays(today(),-29), dc={};
+  list('daylog').filter(e=>!e.isNote&&e.date>=from&&(UI.owner==='all'||e.who===UI.owner)).forEach(e=>{const k=e.domain||'none';dc[k]=(dc[k]||0)+1});
+  list('tasks').filter(t=>t.done&&t.doneAt&&ds(new Date(t.doneAt))>=from&&(UI.owner==='all'||t.owner===UI.owner)).forEach(t=>{const k=t.domain||'none';dc[k]=(dc[k]||0)+1});
+  const drows=Object.entries(dc).sort((a,b)=>b[1]-a[1]), dmax=Math.max(1,...drows.map(r=>r[1]));
+  return `<section class="card"><div class="row between"><h2>גרף התקדמות · 8 שבועות</h2><div class="legend"><span><i style="background:var(--accent)"></i>רישומים ידניים</span><span><i style="background:var(--ok)"></i>משימות שסומנו</span></div></div>
+    <p class="note">השבוע <b class="num">${last}</b> פריטים${prev||last?(last===prev?', כמו בשבוע שעבר':`, ${last>prev?'עלייה':'ירידה'} לעומת <span class="num">${prev}</span> בשבוע שעבר`):''}. סך הכול <span class="num">${tot}</span> בשמונה שבועות.</p>
+    <div class="chart" style="grid-template-columns:repeat(8,minmax(0,1fr))" role="img" aria-label="מה נעשה בכל שבוע, רישומים ידניים ומשימות">${data.map(x=>`<div class="mcol" tabindex="0" data-tk="day" data-tip="שבוע ${fmtDate(x.w)}|${x.m}|${x.t}|${x.min}"><div style="display:flex;flex-direction:column-reverse;align-items:center;height:100%;width:100%;gap:2px">${x.m?`<i style="display:block;width:min(26px,60%);height:${x.m/max*100}%;background:var(--accent);border-radius:${x.t?'0':'4px 4px 0 0'}"></i>`:''}${x.t?`<i style="display:block;width:min(26px,60%);height:${x.t/max*100}%;background:var(--ok);border-radius:4px 4px 0 0"></i>`:''}</div></div>`).join('')}</div>
+    <div class="mlab" style="grid-template-columns:repeat(8,minmax(0,1fr))">${data.map(x=>`<span class="num">${fmtDate(x.w).replace(/^[^ ]+ /,'')}</span>`).join('')}</div>
+    ${drows.length?`<h3 style="margin-top:16px">לפי תחום · 30 ימים אחרונים</h3><div style="display:flex;flex-direction:column;gap:6px">${drows.map(([k,n])=>{const dm=DM[k];return `<div style="display:grid;grid-template-columns:110px 1fr 32px;gap:8px;align-items:center"><span class="small">${dm?dm.n:'ללא תחום'}</span><span style="background:var(--sunk);border-radius:4px;height:12px"><i style="display:block;height:100%;width:${n/dmax*100}%;background:${dm?dm.c:'var(--muted)'};border-radius:4px"></i></span><span class="num small">${n}</span></div>`}).join('')}</div>`:''}
+  </section>`;
+}
+function dayForm(e={}){
+  const isNew=!e.id;
+  openForm(`<h2>${isNew?'רישום בסיכום היומי':'עריכת רישום'}</h2>
+    <label class="f" for="dl-text">מה נעשה<textarea id="dl-text" name="text" required>${esc(e.text||'')}</textarea></label>
+    <div class="frow"><label class="f" for="dl-date">תאריך<input id="dl-date" type="date" name="date" required value="${esc(e.date||UI.day)}"></label>
+      <label class="f" for="dl-who">מי<select id="dl-who" name="who">${opts(OWNERS.map(o=>({k:o,n:o})),e.who||'דינה')}</select></label>
+      <label class="f" for="dl-min">זמן בדקות (לא חובה)<input id="dl-min" type="number" min="0" step="5" name="minutes" value="${esc(e.minutes||'')}"></label></div>
+    <div class="frow"><label class="f" for="dl-proj">פרויקט<select id="dl-proj" name="project">${projOpts(e.project)}</select></label>
+      <label class="f" for="dl-dom">תחום<select id="dl-dom" name="domain"><option value="">ללא</option>${opts(DOMAINS.map(x=>({k:x.k,n:x.n})),e.domain)}</select></label></div>
+    ${footer(!isNew)}`,(fd,btn)=>{
+      if(btn==='delete'){del('daylog',e.id);return}
+      put('daylog',{...e,id:e.id||uid(),text:fd.text.trim(),date:fd.date,who:fd.who,minutes:Number(fd.minutes)||0,project:fd.project||'',domain:fd.domain||'',createdAt:e.createdAt||Date.now()});
+    });
+}
+function addDayEntry(d,fd){
+  if(!fd.text||!fd.text.trim())return;
+  put('daylog',{id:uid(),date:d,text:fd.text.trim(),who:fd.who||'',project:fd.project||'',domain:fd.domain||'',minutes:0,createdAt:Date.now()});
+  toast('נוסף לסיכום של '+(d===today()?'היום':fmtDate(d)));
 }
 
 function vProjects(){
@@ -582,7 +674,7 @@ function renderHeader(){
   list('tasks').forEach(x=>{t++;if(x.done)d++});
   const p=t?Math.round(d/t*100):0; $('#hBar').style.width=p+'%'; $('#hPct').textContent=p+'%';
 }
-const VIEWS={home:vHome,projects:vProjects,tasks:vTasks,calendar:vCalendar,regs:vRegs,money:vMoney};
+const VIEWS={home:vHome,day:vDay,projects:vProjects,tasks:vTasks,calendar:vCalendar,regs:vRegs,money:vMoney};
 function render(){
   if(!loaded)return;
   if(!VIEWS[UI.view])UI.view='home';
@@ -734,17 +826,27 @@ function wireDict(){
     s.textContent=state==='listening'?'מקשיבה… דברי בחופשיות':state==='finishing'?'רגע, מסיימת לשמוע…':reason==='not_granted'?'לא ניתנה גישה למיקרופון. אפשר להקליד.':reason==='time_limit'?'ההקלטה הגיעה למגבלת הזמן. אפשר להמשיך בלחיצה נוספת.':''});
 }
 const voiceBtn=()=>`<button class="btn sm ghost" data-act="voice" title="להגיד משימה בקול">🎙 משימה בקול</button>`;
-function voiceForm(){
-  vBase='';
-  openForm(`<h2>משימה בקול</h2>
-    <p class="note">אמרי מה צריך לעשות, מתי, של מי ובאיזה פרויקט. אפשר כמה משימות ברצף. אסדר הכול ותאשרי לפני השמירה.${window.STANDALONE?' ההקלטה עצמה נשמרת ליד המשימה, ואפשר להשמיע אותה אחר כך.':''}</p>
+function voiceForm(mode){
+  vBase='';const DAY=mode==='day';
+  openForm(`<h2>${DAY?'סיכום בקול':'משימה בקול'}</h2>
+    <p class="note">${DAY?'ספרי מה נעשה היום, גם דברים שלא היו משימה. אחלק לרישומים נפרדים בסיכום של '+(UI.day===today()?'היום':fmtDate(UI.day))+'.':'אמרי מה צריך לעשות, מתי, של מי ובאיזה פרויקט. אפשר כמה משימות ברצף. אסדר הכול ותאשרי לפני השמירה.'}${window.STANDALONE&&!DAY?' ההקלטה עצמה נשמרת ליד המשימה, ואפשר להשמיע אותה אחר כך.':''}</p>
     ${DICT?`<div class="row"><button type="button" class="btn" id="v-mic" data-act="mic" aria-pressed="false">🎙 התחלת הקלטה</button><span id="v-st" class="note" aria-live="polite"></span></div>`
       :`<p class="small" style="background:var(--accent-soft);padding:10px;border-radius:10px">ההקלטה ישירות באפליקציה עובדת בכרום במחשב ובאפליקציית Claude למחשב. בטלפון אפשר ללחוץ על המיקרופון שבמקלדת ולדבר לתוך התיבה.</p>`}
     <label class="f" for="v-text">מה אמרת<textarea id="v-text" name="text" required style="min-height:110px" placeholder="למשל: ביום שלישי בעשר אשיה מקליטה את ההדרכה במתנה. ועד סוף השבוע אני מעלה את דף הנחיתה."></textarea></label>
-    <div class="row between"><span class="note">${SAMPLE?'':'בלי חיבור ל-Claude הטקסט יישמר ככותרת המשימה.'}</span><div class="row"><button class="btn ghost" value="cancel" formnovalidate>ביטול</button><button class="btn" value="save">הפיכה למשימות</button></div></div>`,
+    <div class="row between"><span class="note">${SAMPLE?'':'בלי חיבור ל-Claude הטקסט יישמר ככותרת המשימה.'}</span><div class="row"><button class="btn ghost" value="cancel" formnovalidate>ביטול</button><button class="btn" value="save">${DAY?'הוספה לסיכום':'הפיכה למשימות'}</button></div></div>`,
   fd=>{const text=(fd.text||'').trim();if(!text)return false;
-    (async()=>{if(DICT&&DICT.active()){try{await DICT.stop()}catch(e){}}const v=($('#v-text')?.value||text).trim();dlg.close();parseVoice(v)})();
+    (async()=>{if(DICT&&DICT.active()){try{await DICT.stop()}catch(e){}}const v=($('#v-text')?.value||text).trim();dlg.close();DAY?parseDayVoice(v,UI.day):parseVoice(v)})();
     return false});
+}
+async function parseDayVoice(text,d){
+  if(window.__rec){try{window.__rec.stop&&await window.__rec.stop()}catch(e){}}
+  let items=[{text}];
+  if(SAMPLE){toast('מסדרת את הסיכום…');try{
+    const projs=sortedProjects().map(p=>p.id+': '+p.name).join(' | ');
+    const r=await SAMPLE.json(`פצלי את הסיכום היומי הזה (בעברית, מפי דינה) לרישומים נפרדים של דברים שנעשו. החזירי JSON בלבד: {"items":[{"text":"משפט קצר בעבר","who":"דינה|אשיה|איתי|משותף","domain":"mkt|sales|content|struct|reg|admin|","project":"id או ריק","minutes":0}]}. "אני" = דינה. פרויקטים: ${projs}\n\nהסיכום:\n${text}`,{modelTier:'quick',cache:false});
+    if(r&&Array.isArray(r.items)&&r.items.length)items=r.items}catch(e){}}
+  items.forEach((it,i)=>{if(!it.text||!String(it.text).trim())return;put('daylog',{id:uid(),date:d,text:String(it.text).trim(),who:OWNERS.includes(it.who)?it.who:'דינה',domain:DM[it.domain]?it.domain:'',project:S.projects[it.project]?it.project:'',minutes:Number(it.minutes)||0,createdAt:Date.now()+i})});
+  toast('נוספו '+items.length+' רישומים לסיכום');
 }
 async function parseVoice(text){
   let audio='';if(window.__rec){try{audio=await window.__rec.upload()}catch(e){}}
@@ -833,6 +935,10 @@ document.addEventListener('click',e=>{
     case 'month':{const n=+b.dataset.n;if(!n){UI.month=today().slice(0,7);UI.sel=today()}else{const [y,m]=UI.month.split('-').map(Number);const d=new Date(y,m-1+n,1);UI.month=d.getFullYear()+'-'+pad(d.getMonth()+1)}render();break}
     case 'ics':exportICS();break;
     case 'voice':voiceForm();break;
+    case 'voice-day':voiceForm('day');break;
+    case 'day':{const n=+b.dataset.n;UI.day=n?addDays(UI.day,n):today();render();break}
+    case 'day-go':UI.day=b.dataset.d;render();break;
+    case 'edit-day':dayForm(S.daylog[id]);break;
     case 'play':{const pth=b.dataset.path;if(window.__rec)window.__rec.url(pth).then(u=>{if(u){const a=new Audio(u);a.play().catch(()=>toast('לא הצלחתי להשמיע'))}else toast('ההקלטה לא נמצאה')});break}
     case 'backup':{const o={};COLS.forEach(c=>o[c]=S[c]);saveFile('ashia-center-backup-'+today()+'.json',JSON.stringify(o),'הגיבוי מוכן');break}
     case 'import':$('#imp-file')?.click();break;
@@ -868,8 +974,11 @@ document.addEventListener('change',e=>{
   if(a==='fstat'){UI.tstat=b.value;render()}
   if(a==='showdone'){UI.showDone=b.checked;render()}
 });
+document.addEventListener('submit',e=>{const f=e.target.closest('form.qd');if(!f)return;e.preventDefault();addDayEntry(f.dataset.date,Object.fromEntries(new FormData(f).entries()))});
+document.addEventListener('focusout',e=>{if(e.target.id!=='day-note')return;const d=e.target.dataset.date,v=e.target.value.trim(),id='note-'+d,ex=S.daylog[id];
+  if((ex?.text||'')===v)return; if(!v&&ex){del('daylog',id);return} if(v)put('daylog',{...(ex||{}),id,date:d,text:v,isNote:true,createdAt:ex?.createdAt||Date.now()},true)});
 /* chart tooltip */
-function showTip(el){hideTip();const [m,i,o,bal]=el.dataset.tip.split('|');const t=document.createElement('div');t.className='tip';t.id='tip';t.innerHTML=`<b>${esc(m)}</b><br>הכנסות ${esc(i)}<br>הוצאות ${esc(o)}<br>יתרה ${esc(bal)}`;el.appendChild(t)}
+function showTip(el){hideTip();const [m,i,o,bal]=el.dataset.tip.split('|');const t=document.createElement('div');t.className='tip';t.id='tip';t.innerHTML=el.dataset.tk==='day'?`<b>${esc(m)}</b><br>רישומים ידניים ${esc(i)}<br>משימות שסומנו ${esc(o)}${+bal?`<br>${esc(bal)} דקות`:''}`:`<b>${esc(m)}</b><br>הכנסות ${esc(i)}<br>הוצאות ${esc(o)}<br>יתרה ${esc(bal)}`;el.appendChild(t)}
 function hideTip(){$('#tip')?.remove()}
 document.addEventListener('mouseover',e=>{const c=e.target.closest('.mcol');if(c&&!c.contains($('#tip')))showTip(c);else if(!c)hideTip()});
 document.addEventListener('focusin',e=>{const c=e.target.closest('.mcol');if(c)showTip(c)});
