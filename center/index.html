@@ -231,7 +231,18 @@ const OUTCAT=['פרסום ממומן','קמפיינר ושיווק','צוות ו
 const LKINDS=[{k:'doc',n:'מסמך'},{k:'folder',n:'תיקייה'},{k:'link',n:'קישור'}];
 const DAYS=['א׳','ב׳','ג׳','ד׳','ה׳','ו׳','ש׳'];
 const MONTHS=['ינואר','פברואר','מרץ','אפריל','מאי','יוני','יולי','אוגוסט','ספטמבר','אוקטובר','נובמבר','דצמבר'];
-const COLS=['projects','tasks','regs','links','journal','money','daylog'];
+const COLS=['projects','tasks','regs','links','journal','money','daylog','notes'];
+const AUD_DEFAULT=`הקהל של ההכשרות וההדרכות המקצועיות (הוגדר על ידי דינה, 22.11.2026):
+
+• בכירים, מטפלים מנוסים
+• מורים, מכשירים בעצמם הכשרות מטפלים
+• יודעים מה הם רוצים
+• צריכים את הייחודיות והשפה האישית
+• לא קלישאתי
+
+המסר: זה לא שטאנץ. זה שונה ממה שעשיתי עד עכשיו, ולא מתיימר. אני לא הולכת לחדש לכם.
+
+איך כותבים להם: בגובה העיניים, כמו לעמיתים. בלי להסביר יסודות, בלי הבטחות גדולות ובלי סופרלטיבים. מראים את מה שייחודי בדרך של אשיה, לא "חדש".`;
 
 /* ---------- helpers ---------- */
 const $=s=>document.querySelector(s);
@@ -495,7 +506,11 @@ function vProjects(){
       ${nt?`<p class="small">הצעד הבא: <b>${esc(nt.title)}</b>${nt.owner?` <span class="muted">(${esc(nt.owner)})</span>`:''}</p>`:''}
       <span class="note num">${c.d} מתוך ${c.t} הושלמו · ${openT} משימות פתוחות</span></button>`};
   const act=projs.filter(p=>p.status!=='done'), fin=projs.filter(p=>p.status==='done');
+  const aud=S.notes?.audience;
   return `<div class="row between"><h2>פרויקטים</h2><button class="btn" data-act="new-proj">+ פרויקט חדש</button></div>
+  <details class="card" ${ls.get('audOpen',true)?'open':''} id="aud-box"><summary style="cursor:pointer;font-weight:700;font-size:1.05rem">קהל ומסרים</summary>
+    <label class="f" for="aud-note" style="margin-top:8px">למי אנחנו כותבים ואיך<textarea id="aud-note" style="min-height:220px">${esc(aud?.text??AUD_DEFAULT)}</textarea></label>
+    <p class="note">נשמר אוטומטית כשיוצאים מהתיבה.${aud?.updatedAt?' עודכן '+fmtDate(ds(new Date(aud.updatedAt))):''}</p></details>
   ${act.length?`<div class="grid">${act.map(card).join('')}</div>`:`<div class="empty">עוד אין פרויקטים. לחצי על "פרויקט חדש" כדי להתחיל.</div>`}
   ${fin.length?`<h3>פרויקטים שהסתיימו</h3><div class="grid">${fin.map(card).join('')}</div>`:''}
   <section class="card"><div class="row between"><h2>מסמכים ותיקיות כלליים</h2><button class="btn sm ghost" data-act="new-link">+ קישור</button></div>
@@ -975,6 +990,8 @@ document.addEventListener('change',e=>{
   if(a==='showdone'){UI.showDone=b.checked;render()}
 });
 document.addEventListener('submit',e=>{const f=e.target.closest('form.qd');if(!f)return;e.preventDefault();addDayEntry(f.dataset.date,Object.fromEntries(new FormData(f).entries()))});
+document.addEventListener('focusout',e=>{if(e.target.id!=='aud-note')return;const v=e.target.value.trim(),ex=S.notes?.audience;if((ex?.text??AUD_DEFAULT)===v)return;put('notes',{...(ex||{}),id:'audience',text:v,updatedAt:Date.now()},true)});
+document.addEventListener('toggle',e=>{if(e.target.id==='aud-box')ls.set('audOpen',e.target.open)},true);
 document.addEventListener('focusout',e=>{if(e.target.id!=='day-note')return;const d=e.target.dataset.date,v=e.target.value.trim(),id='note-'+d,ex=S.daylog[id];
   if((ex?.text||'')===v)return; if(!v&&ex){del('daylog',id);return} if(v)put('daylog',{...(ex||{}),id,date:d,text:v,isNote:true,createdAt:ex?.createdAt||Date.now()},true)});
 /* chart tooltip */
