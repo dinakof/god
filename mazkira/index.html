@@ -477,7 +477,7 @@ details[open]>summary.add-sum::before{content:"− "}
         <button type="button" class="btn honey sm live-rec" data-rec="heart" hidden><span class="rec-dot"></span><span class="rec-lab">הקליטי</span></button><label class="icon-btn rec-icon" for="heart-rec" aria-label="הקליטי בקול" title="הקליטי בקול"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4" fill="currentColor"/></svg></label><input type="file" id="heart-rec" accept="audio/*,.m4a,.mp3,.wav,.aac,.ogg,.webm,.amr,.3gp" hidden>
         <button class="btn" id="heart-send">שלחי</button>
       </div>
-      <div class="row"><button class="btn soft sm" id="breath-btn">נשימה מודרכת</button><button class="btn ghost sm" id="heart-new">שיחה חדשה</button></div>
+      <div class="row"><button class="btn soft sm" id="breath-btn">נשימה מודרכת</button><button class="btn ghost sm" id="heart-new">שיחה חדשה</button><button class="btn ghost sm" id="heart-del" hidden>מחיקת השיחה</button></div>
       <p class="safety" id="prog-help" hidden></p>
       <p class="safety">אם עולות מחשבות לפגוע בעצמך, את לא לבד: ער״ן 1201 (כל שעות היממה), סה״ר בצ'אט באתר sahar.org.il, ובמצב חירום 101.</p>
     </div>
@@ -684,7 +684,7 @@ function fresh(){
 let S=null,startedFresh=false,capsDone=false;
 try{S=JSON.parse(localStorage.getItem(LS)||'null')}catch(e){S=null}
 if(!S||!S.v){S=fresh();startedFresh=true}
-function normalize(x){x.settings=Object.assign(fresh().settings,x.settings||{});if(x.onboarded===undefined){x.onboarded=true;x.gender=x.gender||'f';if(!x.name)x.name='דינה'}x.gender=x.gender||'f';x.programs=x.programs||[];x.myQs=x.myQs||[];x.myCs=x.myCs||[];x.palette=x.palette||'teal';x.progData=x.progData||{};x.addedSugg=x.addedSugg||[];return x}
+function normalize(x){x.settings=Object.assign(fresh().settings,x.settings||{});if(x.onboarded===undefined){x.onboarded=true;x.gender=x.gender||'f';if(!x.name)x.name='דינה'}x.gender=x.gender||'f';x.programs=x.programs||[];x.myQs=x.myQs||[];x.myCs=x.myCs||[];x.palette=x.palette||'teal';x.progData=x.progData||{};x.addedSugg=x.addedSugg||[];x.deleted=x.deleted||[];return x}
 normalize(S);
 let remoteDoc=null, saveTimer=null, storageMode='local';
 function save(){
@@ -715,7 +715,8 @@ async function initCaps(){
           if(remote){
             const base=normalize((startedFresh&&remote.onboarded!==false)||(remote.updatedAt||0)>(S.updatedAt||0)?remote:JSON.parse(JSON.stringify(S)));
             const other=base===remote?S:remote;
-            const uni=(k,key)=>{const seen=new Set((base[k]||[]).map(x=>x[key]));(other[k]||[]).forEach(x=>{if(x&&!seen.has(x[key])&&!(x.example&&other===S&&startedFresh)){base[k].push(x);seen.add(x[key])}})};
+            const gone=new Set([...(base.deleted||[]),...(other.deleted||[])]);base.deleted=[...gone].slice(-500);base.journal=(base.journal||[]).filter(x=>!gone.has(x.id));
+            const uni=(k,key)=>{const seen=new Set((base[k]||[]).map(x=>x[key]));(other[k]||[]).forEach(x=>{if(x&&!seen.has(x[key])&&!gone.has(x[key])&&!(x.example&&other===S&&startedFresh)){base[k].push(x);seen.add(x[key])}})};
             uni('tasks','id');uni('journal','id');uni('meetings','id');uni('moods','at');
             S=base;try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){};save();renderAll()}
           else save();
@@ -1113,6 +1114,7 @@ wireMic('#sec-mic','#sec-input');wireMic('#q-mic','#q-answer');wireMic('#t-mic',
 /* ---------- recorded answers ---------- */
 const IDB={db:null,open(){return this.db?Promise.resolve(this.db):new Promise((res,rej)=>{try{const r=indexedDB.open('mazkira-audio',1);r.onupgradeneeded=()=>r.result.createObjectStore('a');r.onsuccess=()=>{this.db=r.result;res(this.db)};r.onerror=()=>rej(r.error)}catch(e){rej(e)}})},
   async put(id,blob){const d=await this.open();return new Promise((res,rej)=>{const t=d.transaction('a','readwrite');t.objectStore('a').put(blob,id);t.oncomplete=res;t.onerror=()=>rej(t.error)})},
+  async del(id){const d=await this.open();return new Promise(res=>{const t=d.transaction('a','readwrite');t.objectStore('a').delete(id);t.oncomplete=res;t.onerror=res})},
   async get(id){const d=await this.open();return new Promise((res,rej)=>{const r=d.transaction('a').objectStore('a').get(id);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}};
 async function storeAudio(file){const id='a'+uid();try{await IDB.put(id,file);return id}catch(e){toast('לא הצלחתי לשמור את ההקלטה במכשיר הזה.',false);return null}}
 async function hydrateAudio(root){(root||document).querySelectorAll('audio[data-aid]:not([src])').forEach(async el=>{try{const b=await IDB.get(el.dataset.aid);if(b)el.src=URL.createObjectURL(b);else el.replaceWith(Object.assign(document.createElement('span'),{className:'small muted',textContent:'ההקלטה שמורה במכשיר אחר.'}))}catch(e){}})}
@@ -1165,6 +1167,7 @@ showLiveRec();
 let heart=[],heartStep=0,heartBusy=false,heartEntry=null;
 const CRISIS=/להתאבד|התאבדות|לשים קץ|לא רוצה לחיות|לפגוע בעצמי|למות|אובדני/;
 function renderHeart(){
+  $('#heart-del').hidden=!heart.length;
   $('#heart-chat').innerHTML=heart.map(m=>`<div class="bubble ${m.role==='assistant'?'bot':'user'}">${m.audio?audioTag(m.audio):esc(m.content)}</div>`).join('')||`<div class="bubble bot">${esc(`${nm()}, אני כאן. מה עובר עלייך עכשיו? אפשר גם לבחור מילה אחת למעלה.`)}</div>`;
 }
 $('#feel-chips').innerHTML=FEELS.map(f=>`<button class="chip" data-feel="${f}">${f}</button>`).join('');
@@ -1207,6 +1210,16 @@ async function heartSend(){
 $('#heart-send').onclick=heartSend;
 $('#heart-input').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();heartSend()}});
 $('#heart-new').onclick=()=>{heart=[];heartEntry=null;heartStep=0;$('#heart-extra').innerHTML='';renderHeart()};
+function deleteHeartEntry(id){
+  const e=S.journal.find(j=>j.id===id);if(e&&e.msgs)e.msgs.forEach(m=>{if(m.audio)IDB.del(m.audio).catch(()=>{})});
+  S.journal=S.journal.filter(j=>j.id!==id);S.deleted=(S.deleted||[]).concat(id).slice(-500);save();
+}
+function confirmBox(where,text,onYes){
+  where.innerHTML=`<div class="card" style="gap:10px;background:var(--honey-soft)"><span>${esc(G(text))}</span><div class="row"><button class="btn sm" data-yes>${esc(G('כן, למחוק'))}</button><button class="btn ghost sm" data-no>${esc(G('לא, להשאיר'))}</button></div></div>`;
+  where.querySelector('[data-yes]').onclick=onYes;where.querySelector('[data-no]').onclick=()=>{where.innerHTML=''};
+}
+$('#heart-del').onclick=()=>confirmBox($('#heart-extra'),'למחוק את השיחה הזאת? היא תימחק לגמרי, גם מהיומן שלך, ואי אפשר יהיה להחזיר אותה.',()=>{
+  if(heartEntry)deleteHeartEntry(heartEntry.id);heart=[];heartEntry=null;heartStep=0;$('#heart-extra').innerHTML='';renderHeart();toast('השיחה נמחקה. המקום הזה תמיד פתוח לך מחדש.',false)});
 let breathTimer=null;
 $('#breath-btn').onclick=()=>{
   const ex=$('#heart-extra');ex.innerHTML=`<div class="breath"><div class="circle" id="bc">מוכנה?</div><button class="btn ghost sm" id="b-stop">סיום</button></div>`;
@@ -1339,11 +1352,13 @@ function renderJournal(){
     if(x.k==='mood')body=`<span class="eyebrow">מצב רוח · ${tm(x.at)}</span><span>${MOODS[x.m.v-1][0]}</span>`;
     if(x.k==='done')body=`<span class="eyebrow">משימה שסיימת · ${tm(x.at)}</span><span data-raw><i class="dot c-${x.t.color}" style="display:inline-block;background:currentColor;margin-inline-end:6px"></i>${esc(x.t.title)}</span>`;
     if(x.k==='meet')body=`<span class="eyebrow">פגישה שנרשמה</span><span data-raw>${esc(meetTitle(x.m))}, ${fmtDay(x.m.date)} ${esc(x.m.time)}</span>`;
-    if(x.k==='heart')body=`<span class="eyebrow">שיחה במקום הבטוח · ${tm(x.at)}</span><details><summary>לקרוא את השיחה (${x.j.msgs.length} הודעות)</summary><div class="chat" style="margin-top:8px">${x.j.msgs.map(m=>`<div class="bubble ${m.r==='b'?'bot':'user'}" data-raw>${m.audio?audioTag(m.audio):esc(m.t)}</div>`).join('')}</div></details>`;
+    if(x.k==='heart')body=`<span class="eyebrow">שיחה במקום הבטוח · ${tm(x.at)}</span><details><summary>לקרוא את השיחה (${x.j.msgs.length} הודעות)</summary><div class="chat" style="margin-top:8px">${x.j.msgs.map(m=>`<div class="bubble ${m.r==='b'?'bot':'user'}" data-raw>${m.audio?audioTag(m.audio):esc(m.t)}</div>`).join('')}</div><div class="row" style="margin-top:8px"><button class="btn ghost sm" data-jdel="${x.j.id}">מחיקת השיחה</button></div><div data-jconf="${x.j.id}"></div></details>`;
     h+=`<div class="card" style="gap:6px">${body}</div>`});
   $('#j-list').innerHTML=h||`<div class="card empty">${esc(G('עוד אין כאן כלום. כל תשובה, מצב רוח, משימה שתסיימי ושיחה יופיעו כאן.'))}</div>`;
   hydrateAudio($('#j-list'));
 }
+$('#j-list').addEventListener('click',e=>{const b=e.target.closest('[data-jdel]');if(!b)return;const id=b.dataset.jdel;
+  confirmBox(document.querySelector(`[data-jconf="${id}"]`),'למחוק את השיחה הזאת? היא תימחק לגמרי ואי אפשר יהיה להחזיר אותה.',()=>{deleteHeartEntry(id);if(heartEntry&&heartEntry.id===id){heart=[];heartEntry=null;heartStep=0}renderJournal();toast('השיחה נמחקה.',false)})});
 $('#j-filter').addEventListener('click',e=>{const b=e.target.closest('[data-jf]');if(!b)return;jFilter=b.dataset.jf;renderJournal()});
 
 /* ---------- palettes ---------- */
