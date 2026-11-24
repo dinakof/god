@@ -1,5 +1,5 @@
 /* Center app offline cache. Network first so updates arrive; cache as fallback. Never caches Supabase calls. */
-const CACHE='center-v4';
+const CACHE='center-v5';
 const SHELL=['./','index.html','config.js','shim.js','manifest.webmanifest','icon-192.png','icon-512.png','apple-touch-icon.png'];
 self.addEventListener('install',e=>{e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()))});
 self.addEventListener('activate',e=>{e.waitUntil(caches.keys().then(ks=>Promise.all(ks.filter(k=>k.startsWith('center-')&&k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim()))});
