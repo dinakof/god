@@ -171,7 +171,10 @@ td select{padding:3px 6px;border-radius:6px;border:1px solid var(--line);backgro
 .amt{font-variant-numeric:tabular-nums;white-space:nowrap}
 .planned{opacity:.6}
 /* forms */
-dialog{border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--ink);padding:0;width:min(580px,calc(100vw - 24px));max-height:calc(100vh - 40px)}
+dialog{border:1px solid var(--line);border-radius:16px;background:var(--surface);color:var(--ink);padding:0;width:min(580px,calc(100vw - 24px));max-height:calc(100vh - 24px);max-height:calc(100dvh - 24px);overflow-y:auto;overscroll-behavior:contain}
+.ffoot{position:sticky;bottom:0;z-index:2;background:var(--surface);margin:4px -18px -18px;padding:12px 18px 16px;border-top:1px solid var(--line);flex-wrap:wrap}
+.dclose{position:sticky;top:0;z-index:2;align-self:flex-end;margin:-6px -6px -40px 0;background:var(--surface)}
+@media (max-width:520px){dialog{width:100vw;max-width:100vw;margin:auto 0 0;border-radius:16px 16px 0 0}}
 dialog::backdrop{background:rgba(10,12,18,.45)}
 dialog form{display:flex;flex-direction:column;gap:12px;padding:18px}
 label.f{display:flex;flex-direction:column;gap:4px;font-size:.86rem;color:var(--muted);min-width:0}
@@ -704,7 +707,7 @@ function go(v){UI.view=v;if(v!=='projects')UI.open=null;ls.set('view',v);render(
 /* ---------- forms ---------- */
 const dlg=$('#dlg'), dform=$('#dform');
 let onSubmit=null;
-function openForm(html,submit){dform.innerHTML=html;onSubmit=submit;dlg.showModal();dlg.onclose=()=>{try{if(DICT&&DICT.active())DICT.stop().catch(()=>{})}catch(e){}};setTimeout(()=>dform.querySelector('input:not([type=checkbox]),select')?.focus(),30)}
+function openForm(html,submit){dform.innerHTML='<button class="icon dclose" value="cancel" formnovalidate aria-label="סגירה">✕</button>'+html;dlg.scrollTop=0;onSubmit=submit;dlg.showModal();dlg.onclose=()=>{try{if(DICT&&DICT.active())DICT.stop().catch(()=>{})}catch(e){}};setTimeout(()=>dform.querySelector('input:not([type=checkbox]),select')?.focus(),30)}
 dform.addEventListener('submit',e=>{
   e.preventDefault(); const btn=e.submitter?.value;
   if(btn==='cancel'){dlg.close();return}
@@ -713,7 +716,7 @@ dform.addEventListener('submit',e=>{
   dform.querySelectorAll('input[type=checkbox][name]').forEach(c=>fd[c.name]=c.checked);
   if(onSubmit&&onSubmit(fd,btn)!==false)dlg.close();
 });
-const footer=(canDel)=>`<div class="row between"><div>${canDel?'<button class="btn danger" value="delete" formnovalidate>מחיקה</button>':''}</div><div class="row"><button class="btn ghost" value="cancel" formnovalidate>ביטול</button><button class="btn" value="save">שמירה</button></div></div>`;
+const footer=(canDel)=>`<div class="row between ffoot"><div>${canDel?'<button class="btn danger" value="delete" formnovalidate>מחיקה</button>':''}</div><div class="row"><button class="btn ghost" value="cancel" formnovalidate>ביטול</button><button class="btn" value="save">שמירה</button></div></div>`;
 const opts=(arr,cur)=>arr.map(o=>`<option value="${esc(o.k)}" ${o.k===cur?'selected':''}>${esc(o.n)}</option>`).join('');
 const projOpts=cur=>`<option value="">בלי פרויקט</option>`+opts(sortedProjects().map(p=>({k:p.id,n:p.name})),cur);
 
@@ -848,7 +851,7 @@ function voiceForm(mode){
     ${DICT?`<div class="row"><button type="button" class="btn" id="v-mic" data-act="mic" aria-pressed="false">🎙 התחלת הקלטה</button><span id="v-st" class="note" aria-live="polite"></span></div>`
       :`<p class="small" style="background:var(--accent-soft);padding:10px;border-radius:10px">ההקלטה ישירות באפליקציה עובדת בכרום במחשב ובאפליקציית Claude למחשב. בטלפון אפשר ללחוץ על המיקרופון שבמקלדת ולדבר לתוך התיבה.</p>`}
     <label class="f" for="v-text">מה אמרת<textarea id="v-text" name="text" required style="min-height:110px" placeholder="למשל: ביום שלישי בעשר אשיה מקליטה את ההדרכה במתנה. ועד סוף השבוע אני מעלה את דף הנחיתה."></textarea></label>
-    <div class="row between"><span class="note">${SAMPLE?'':'בלי חיבור ל-Claude הטקסט יישמר ככותרת המשימה.'}</span><div class="row"><button class="btn ghost" value="cancel" formnovalidate>ביטול</button><button class="btn" value="save">${DAY?'הוספה לסיכום':'הפיכה למשימות'}</button></div></div>`,
+    <div class="row between ffoot"><span class="note">${SAMPLE?'':'בלי חיבור ל-Claude הטקסט יישמר ככותרת המשימה.'}</span><div class="row"><button class="btn ghost" value="cancel" formnovalidate>ביטול</button><button class="btn" value="save">${DAY?'הוספה לסיכום':'הפיכה למשימות'}</button></div></div>`,
   fd=>{const text=(fd.text||'').trim();if(!text)return false;
     (async()=>{if(DICT&&DICT.active()){try{await DICT.stop()}catch(e){}}const v=($('#v-text')?.value||text).trim();dlg.close();DAY?parseDayVoice(v,UI.day):parseVoice(v)})();
     return false});
@@ -889,7 +892,7 @@ async function parseVoice(text){
   openForm(`<h2>${tasks.length} משימות מההקלטה</h2><p class="note">סמני מה לשמור. אפשר לערוך כל משימה אחר כך.</p>
     <ul class="tasks">${tasks.map((t,i)=>`<li class="task" style="--c:${DM[t.domain].c}"><input type="checkbox" name="k${i}" id="vk${i}" checked aria-label="לשמור"><label for="vk${i}"><div class="ttl">${esc(t.title)}</div>
       <div class="meta">${t.date?`<span class="num">${fmtDate(t.date)}${t.time?' · '+t.time:''}</span>`:''}${t.owner?`<span class="tag own">${esc(t.owner)}</span>`:''}${dtag(t.domain)}${t.project?`<span>${esc(pname(t.project))}</span>`:''}</div>${t.notes?`<div class="tnote">${esc(t.notes)}</div>`:''}</label><span></span></li>`).join('')}</ul>
-    <div class="row between"><span></span><div class="row"><button class="btn ghost" value="cancel" formnovalidate>ביטול</button><button class="btn" value="save">שמירת המשימות</button></div></div>`,
+    <div class="row between ffoot"><span></span><div class="row"><button class="btn ghost" value="cancel" formnovalidate>ביטול</button><button class="btn" value="save">שמירת המשימות</button></div></div>`,
   fd=>{let n=0;tasks.forEach((t,i)=>{if(fd['k'+i]){n++;put('tasks',{...t,id:uid(),done:false,doneAt:null,dur:60,step:0,link:'',linkTitle:'',milestone:false,createdAt:Date.now(),fromVoice:true},true)}});render();toast(n+' משימות נוספו')});
 }
 
